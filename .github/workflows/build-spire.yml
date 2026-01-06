@@ -1,0 +1,131 @@
+name: Build SPIRE macOS Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SPIRE version to build (e.g., 1.9.6)'
+        required: true
+        default: '1.9.6'
+
+jobs:
+  build:
+    name: Build and Release SPIRE for macOS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout SPIRE repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'spiffe/spire'
+          ref: 'v${{ github.event.inputs.version }}'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build for macOS amd64
+        env:
+          GOOS: darwin
+          GOARCH: amd64
+        run: |
+          # Build spire-server
+          cd cmd/spire-server
+          go build -o ../../build/spire-server
+          cd ../..
+
+          # Build spire-agent
+          cd cmd/spire-agent
+          go build -o ../../build/spire-agent
+          cd ../..
+
+          # Create release directory structure
+          mkdir -p release/spire-${{ github.event.inputs.version }}
+          cp build/spire-server release/spire-${{ github.event.inputs.version }}/
+          cp build/spire-agent release/spire-${{ github.event.inputs.version }}/
+
+          # Create tarball
+          cd release
+          tar -czf spire-${{ github.event.inputs.version }}-macos-amd64.tar.gz spire-${{ github.event.inputs.version }}/
+          cd ..
+
+          # Clean up build directory for next architecture
+          rm -rf build release/spire-${{ github.event.inputs.version }}
+
+      - name: Build for macOS arm64
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+        run: |
+          # Build spire-server
+          cd cmd/spire-server
+          go build -o ../../build/spire-server
+          cd ../..
+
+          # Build spire-agent
+          cd cmd/spire-agent
+          go build -o ../../build/spire-agent
+          cd ../..
+
+          # Create release directory structure
+          mkdir -p release/spire-${{ github.event.inputs.version }}
+          cp build/spire-server release/spire-${{ github.event.inputs.version }}/
+          cp build/spire-agent release/spire-${{ github.event.inputs.version }}/
+
+          # Create tarball
+          cd release
+          tar -czf spire-${{ github.event.inputs.version }}-macos-arm64.tar.gz spire-${{ github.event.inputs.version }}/
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: SPIRE v${{ github.event.inputs.version }} - macOS Binaries
+          draft: false
+          prerelease: false
+          files: |
+            release/spire-${{ github.event.inputs.version }}-macos-amd64.tar.gz
+            release/spire-${{ github.event.inputs.version }}-macos-arm64.tar.gz
+          body: |
+            # SPIRE v${{ github.event.inputs.version }} - macOS Binaries
+
+            Pre-built macOS binaries for SPIRE v${{ github.event.inputs.version }}.
+
+            ## Downloads
+
+            - **macOS Intel (amd64)**: `spire-${{ github.event.inputs.version }}-macos-amd64.tar.gz`
+            - **macOS Apple Silicon (arm64)**: `spire-${{ github.event.inputs.version }}-macos-arm64.tar.gz`
+
+            ## Installation
+
+            ```bash
+            # Download and extract (replace {arch} with amd64 or arm64)
+            wget https://github.com/${{ github.repository }}/releases/download/v${{ github.event.inputs.version }}/spire-${{ github.event.inputs.version }}-macos-{arch}.tar.gz
+            tar -xzf spire-${{ github.event.inputs.version }}-macos-{arch}.tar.gz
+
+            # Binaries are in spire-${{ github.event.inputs.version }}/ directory
+            cd spire-${{ github.event.inputs.version }}/
+            ./spire-server --version
+            ./spire-agent --version
+            ```
+
+            ## Usage with Eigenoid
+
+            The Eigenoid SDK will automatically download and use these binaries on macOS.
+
+            ```bash
+            eigenoid start
+            ```
+
+            ## Notes
+
+            - These binaries are **not code-signed**. On first run, you may need to allow them in System Settings > Privacy & Security.
+            - Built from official SPIRE source: https://github.com/spiffe/spire/tree/v${{ github.event.inputs.version }}
+
+            ---
+
+            Generated with [Claude Code](https://claude.com/claude-code)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
