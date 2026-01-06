@@ -8,6 +8,9 @@ on:
         required: true
         default: '1.9.6'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build and Release SPIRE for macOS
