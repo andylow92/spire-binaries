@@ -13,8 +13,16 @@ permissions:
 
 jobs:
   build:
-    name: Build and Release SPIRE for macOS
-    runs-on: ubuntu-latest
+    name: Build SPIRE for macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: macos-13
+          - arch: arm64
+            runner: macos-latest
 
     steps:
       - name: Checkout SPIRE repository
@@ -28,73 +36,58 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Build for macOS amd64
+      - name: Build SPIRE binaries (CGO enabled)
         env:
-          GOOS: darwin
-          GOARCH: amd64
+          CGO_ENABLED: 1
         run: |
+          set -euo pipefail
+
           # Build spire-server
           cd cmd/spire-server
-          go build -o ../../build/spire-server
+          go build -o ../../spire-server
           cd ../..
 
           # Build spire-agent
           cd cmd/spire-agent
-          go build -o ../../build/spire-agent
+          go build -o ../../spire-agent
           cd ../..
 
-          # Create release directory structure
-          mkdir -p release/spire-${{ github.event.inputs.version }}
-          cp build/spire-server release/spire-${{ github.event.inputs.version }}/
-          cp build/spire-agent release/spire-${{ github.event.inputs.version }}/
+          # Package
+          mkdir -p spire-${{ github.event.inputs.version }}
+          mv spire-server spire-agent spire-${{ github.event.inputs.version }}/
 
-          # Create tarball
-          cd release
-          tar -czf spire-${{ github.event.inputs.version }}-macos-amd64.tar.gz spire-${{ github.event.inputs.version }}/
-          cd ..
+          tar -czf spire-${{ github.event.inputs.version }}-macos-${{ matrix.arch }}.tar.gz \
+            spire-${{ github.event.inputs.version }}/
 
-          # Clean up build directory for next architecture
-          rm -rf build release/spire-${{ github.event.inputs.version }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spire-macos-${{ matrix.arch }}
+          path: spire-${{ github.event.inputs.version }}-macos-${{ matrix.arch }}.tar.gz
 
-      - name: Build for macOS arm64
-        env:
-          GOOS: darwin
-          GOARCH: arm64
-        run: |
-          # Build spire-server
-          cd cmd/spire-server
-          go build -o ../../build/spire-server
-          cd ../..
+  release:
+    name: Create/Update GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
 
-          # Build spire-agent
-          cd cmd/spire-agent
-          go build -o ../../build/spire-agent
-          cd ../..
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-          # Create release directory structure
-          mkdir -p release/spire-${{ github.event.inputs.version }}
-          cp build/spire-server release/spire-${{ github.event.inputs.version }}/
-          cp build/spire-agent release/spire-${{ github.event.inputs.version }}/
-
-          # Create tarball
-          cd release
-          tar -czf spire-${{ github.event.inputs.version }}-macos-arm64.tar.gz spire-${{ github.event.inputs.version }}/
-          cd ..
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      # This creates/updates release metadata (safe even if tag exists)
+      - name: Create/Update Release metadata
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.event.inputs.version }}
           name: SPIRE v${{ github.event.inputs.version }} - macOS Binaries
           draft: false
           prerelease: false
-          files: |
-            release/spire-${{ github.event.inputs.version }}-macos-amd64.tar.gz
-            release/spire-${{ github.event.inputs.version }}-macos-arm64.tar.gz
           body: |
             # SPIRE v${{ github.event.inputs.version }} - macOS Binaries
 
-            Pre-built macOS binaries for SPIRE v${{ github.event.inputs.version }}.
+            Pre-built macOS binaries for SPIRE v${{ github.event.inputs.version }} (CGO-enabled, SQLite supported).
 
             ## Downloads
 
@@ -130,3 +123,16 @@ jobs:
             ---
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Overwrite existing assets for the same tag
+      - name: Upload assets (overwrite existing)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ github.event.inputs.version }}"
+
+          gh release upload "$TAG" \
+            artifacts/spire-macos-amd64/spire-${{ github.event.inputs.version }}-macos-amd64.tar.gz \
+            artifacts/spire-macos-arm64/spire-${{ github.event.inputs.version }}-macos-arm64.tar.gz \
+            --clobber
