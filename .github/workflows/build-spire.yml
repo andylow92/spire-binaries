@@ -128,7 +128,5 @@ jobs:
             - Built from official SPIRE source: https://github.com/spiffe/spire/tree/v${{ github.event.inputs.version }}
 
             ---
-
-            Generated with [Claude Code](https://claude.com/claude-code)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
