@@ -20,7 +20,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: macos-13
+            runner: macos-15-intel
           - arch: arm64
             runner: macos-latest
 
@@ -52,7 +52,7 @@ jobs:
           go build -o ../../spire-agent
           cd ../..
 
-          # Package
+          # Create tarball
           mkdir -p spire-${{ github.event.inputs.version }}
           mv spire-server spire-agent spire-${{ github.event.inputs.version }}/
 
@@ -76,7 +76,6 @@ jobs:
         with:
           path: artifacts
 
-      # This creates/updates release metadata (safe even if tag exists)
       - name: Create/Update Release metadata
         uses: softprops/action-gh-release@v2
         with:
@@ -106,25 +105,9 @@ jobs:
             ./spire-server --version
             ./spire-agent --version
             ```
-
-            ## Usage with Eigenoid
-
-            The Eigenoid SDK will automatically download and use these binaries on macOS.
-
-            ```bash
-            eigenoid start
-            ```
-
-            ## Notes
-
-            - These binaries are **not code-signed**. On first run, you may need to allow them in System Settings > Privacy & Security.
-            - Built from official SPIRE source: https://github.com/spiffe/spire/tree/v${{ github.event.inputs.version }}
-
-            ---
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Overwrite existing assets for the same tag
       - name: Upload assets (overwrite existing)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
